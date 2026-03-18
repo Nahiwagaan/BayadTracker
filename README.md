@@ -1,6 +1,16 @@
-# Welcome to your Expo app 👋
+# BayadTracker
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+BayadTracker is a lightweight loan and borrower tracker built with Expo + Expo Router and backed by local SQLite.
+
+Track borrowers, create loans with weekly terms, and mark each week as paid/unpaid or apply partial payments with a custom amount. Loan totals and remaining balances update automatically based on what you record.
+
+## Features
+
+- Borrowers list with search
+- Borrower details with loan summary and active loans
+- Create loans (principal, interest, duration in weeks)
+- Loan details with interactive weekly payments (paid/unpaid/custom + partial payments)
+- Local-first storage using `expo-sqlite`
 
 ## Get started
 
@@ -25,26 +35,14 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
-## Get a fresh project
+## Notes
 
-When you're ready, run:
+- Data is stored locally in `bayadtracker.db` using SQLite.
+- On Android/iOS, clearing app storage will reset local data.
 
-```bash
-npm run reset-project
-```
+## Tech
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Expo SDK
+- Expo Router (file-based navigation)
+- React Native
+- SQLite (`expo-sqlite`)
