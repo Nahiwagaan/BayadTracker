@@ -343,23 +343,50 @@ export default function LoanDetailsScreen() {
     async (weekNo: number, amount: number) => {
       if (!loan) return;
 
-      const row = weeks.find((w) => w.weekNo === weekNo);
-      if (!row) return;
+      let remainingToApply = Math.max(0, Math.round(amount));
+      if (remainingToApply <= 0) return;
 
-      const due = Math.max(0, row.dueAmount ?? 0);
-      const currentPaid = Math.max(0, row.paidAmount ?? 0);
-      const delta = Math.max(0, Math.round(amount));
-      const nextPaid = Math.min(due, currentPaid + delta);
+      const startIdx = weeks.findIndex((w) => w.weekNo === weekNo);
+      if (startIdx === -1) return;
 
-      await updateWeeklyPayment(loan.id, weekNo, {
-        status: nextPaid >= due && due > 0 ? 'paid' : 'unpaid',
-        paidAmount: nextPaid,
-      });
-      await syncPaidAmount(loan.id);
-      setWeeks(await listWeeklyPaymentsByLoan(loan.id));
-      setModes((prev) => ({ ...prev, [weekNo]: nextPaid >= due && due > 0 ? 'paid' : 'custom' }));
+      try {
+        for (let i = startIdx; i < weeks.length; i++) {
+          if (remainingToApply <= 0) break;
+
+          const w = weeks[i];
+          const due = Math.max(0, w.dueAmount ?? 0);
+          const currentPaid = Math.max(0, w.paidAmount ?? 0);
+          const capacity = Math.max(0, due - currentPaid);
+
+          if (capacity > 0) {
+            const toAdd = Math.min(capacity, remainingToApply);
+            const nextPaid = currentPaid + toAdd;
+            remainingToApply -= toAdd;
+
+            await updateWeeklyPayment(loan.id, w.weekNo, {
+              status: nextPaid >= due && due > 0 ? 'paid' : 'unpaid',
+              paidAmount: nextPaid,
+            });
+          }
+        }
+
+        await syncPaidAmount(loan.id);
+        const nextWeeks = await listWeeklyPaymentsByLoan(loan.id);
+        setWeeks(nextWeeks);
+
+        const nextModes: Record<number, 'paid' | 'unpaid' | 'custom' | null> = { ...modes };
+        for (const w of nextWeeks) {
+          const due = Math.max(0, w.dueAmount ?? 0);
+          const paid = Math.max(0, w.paidAmount ?? 0);
+          nextModes[w.weekNo] =
+            paid >= due && due > 0 ? 'paid' : paid > 0 ? 'custom' : w.status === 'unpaid' ? 'unpaid' : null;
+        }
+        setModes(nextModes);
+      } catch {
+        // ignore
+      }
     },
-    [loan, syncPaidAmount, weeks]
+    [loan, syncPaidAmount, weeks, modes]
   );
 
   return (

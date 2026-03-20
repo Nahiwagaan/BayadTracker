@@ -54,53 +54,52 @@ function LoanPreviewCard({ loan, isDark, onRefresh }: { loan: Loan; isDark: bool
 
   const onQuickPay = async (mode: 'paid' | 'custom', customVal?: number) => {
     if (!currentWeek) return;
-    setSelectedMode(mode);
 
+    let remainingToApply = 0;
     if (mode === 'paid') {
-      Alert.alert(
-        'Mark as paid?',
-        `This will mark Week ${currentWeek.weekNo} as paid (₱${Math.round(currentWeek.dueAmount).toLocaleString()}).`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => {
-              setSelectedMode(null);
-            },
-          },
-          {
-            text: 'Mark Paid',
-            onPress: async () => {
-              try {
-                await updateWeeklyPayment(loan.id, currentWeek.weekNo, { status: 'paid', paidAmount: currentWeek.dueAmount });
-                const totalPaid = await computePaidAmountForLoan(loan.id);
-                await setLoanPaidAmount(loan.id, totalPaid);
-                onRefresh();
-                refreshCurrentWeek();
-                setCustomOpen(false);
-              } finally {
-                setSelectedMode(null);
-              }
-            },
-          },
-        ]
-      );
-      return;
+      remainingToApply = Math.max(0, currentWeek.dueAmount - (currentWeek.paidAmount ?? 0));
     } else if (mode === 'custom' && customVal !== undefined) {
-      const currentPaid = currentWeek.paidAmount ?? 0;
-      const nextPaid = Math.min(currentWeek.dueAmount, currentPaid + customVal);
-      await updateWeeklyPayment(loan.id, currentWeek.weekNo, {
-        status: nextPaid >= currentWeek.dueAmount ? 'paid' : 'pending',
-        paidAmount: nextPaid,
-      });
+      remainingToApply = Math.max(0, customVal);
     }
 
-    const totalPaid = await computePaidAmountForLoan(loan.id);
-    await setLoanPaidAmount(loan.id, totalPaid);
-    onRefresh();
-    refreshCurrentWeek();
-    setCustomOpen(false);
-    setSelectedMode(null);
+    if (remainingToApply <= 0) return;
+    setSelectedMode(mode);
+
+    try {
+      const wpList = await listWeeklyPaymentsByLoan(loan.id);
+      const startIdx = wpList.findIndex((w) => w.weekNo === currentWeek.weekNo);
+      if (startIdx === -1) return;
+
+      for (let i = startIdx; i < wpList.length; i++) {
+        if (remainingToApply <= 0) break;
+
+        const w = wpList[i];
+        const due = Math.max(0, w.dueAmount ?? 0);
+        const currentPaid = Math.max(0, w.paidAmount ?? 0);
+        const capacity = Math.max(0, due - currentPaid);
+
+        if (capacity > 0) {
+          const toAdd = Math.min(capacity, remainingToApply);
+          const nextPaid = currentPaid + toAdd;
+          remainingToApply -= toAdd;
+
+          await updateWeeklyPayment(loan.id, w.weekNo, {
+            status: nextPaid >= due && due > 0 ? 'paid' : 'pending',
+            paidAmount: nextPaid,
+          });
+        }
+      }
+
+      const totalPaid = await computePaidAmountForLoan(loan.id);
+      await setLoanPaidAmount(loan.id, totalPaid);
+      onRefresh();
+      refreshCurrentWeek();
+      setCustomOpen(false);
+    } catch {
+      // ignore
+    } finally {
+      setSelectedMode(null);
+    }
   };
 
   const segmentOffBg = isDark ? '#0E1216' : '#EDF1F4';
