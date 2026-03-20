@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Fonts } from '@/constants/theme';
 import { getBorrowerById } from '@/data/borrowers-db';
 import { createLoan } from '@/data/loans-db';
+import { getSettings } from '@/data/settings-db';
 import { ensureWeeklyPaymentsForLoan } from '@/data/weekly-payments-db';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -57,6 +58,14 @@ export default function AddLoanScreen() {
       try {
         const b = await getBorrowerById(borrowerId);
         if (!cancelled) setBorrowerName(b?.fullName ?? '');
+        
+        // Load defaults
+        const s = await getSettings();
+        if (!cancelled) {
+          setPrincipal(String(s.defaultPrincipal));
+          setInterest(String(s.defaultInterest));
+          setWeeks(String(s.defaultDuration));
+        }
       } catch {
         if (!cancelled) setBorrowerName('');
       }

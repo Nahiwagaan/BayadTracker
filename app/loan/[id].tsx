@@ -2,7 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/theme';
@@ -15,6 +15,19 @@ import {
   updateWeeklyPayment,
   type WeeklyPaymentRow,
 } from '@/data/weekly-payments-db';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function dateKeyUTC(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function dueDateKeyUTC(loanCreatedAt: string, weekNo: number) {
+  const base = Date.parse(loanCreatedAt);
+  if (!Number.isFinite(base)) return null;
+  const due = new Date(base + (Math.max(1, weekNo) - 1) * 7 * DAY_MS);
+  return dateKeyUTC(due);
+}
 
 function formatPeso(amount: number) {
   const n = Number.isFinite(amount) ? amount : 0;
@@ -29,12 +42,14 @@ function formatPeso(amount: number) {
 function PaymentRow({
   item,
   isDark,
+  isOverdue,
   selectedMode,
   onSelectMode,
   onApplyCustom,
 }: {
   item: WeeklyPaymentRow;
   isDark: boolean;
+  isOverdue: boolean;
   selectedMode: 'paid' | 'unpaid' | 'custom' | null;
   onSelectMode: (mode: 'paid' | 'unpaid' | 'custom') => void;
   onApplyCustom: (amountToApply: number) => void;
@@ -48,7 +63,7 @@ function PaymentRow({
       ? 'paid'
       : paid > 0
         ? 'partial'
-        : item.status === 'unpaid'
+        : item.status === 'unpaid' || isOverdue
           ? 'unpaid'
           : 'pending';
 
@@ -216,6 +231,8 @@ export default function LoanDetailsScreen() {
   const [weeks, setWeeks] = useState<WeeklyPaymentRow[]>([]);
   const [modes, setModes] = useState<Record<number, 'paid' | 'unpaid' | 'custom' | null>>({});
 
+  const todayKey = useMemo(() => dateKeyUTC(new Date()), []);
+
   const refresh = useCallback(() => {
     let cancelled = false;
 
@@ -282,16 +299,37 @@ export default function LoanDetailsScreen() {
   const onSelectMode = useCallback(
     async (weekNo: number, mode: 'paid' | 'unpaid' | 'custom') => {
       if (!loan) return;
+      if (mode === 'paid') {
+        const row = weeks.find((w) => w.weekNo === weekNo);
+        const due = Math.max(0, row?.dueAmount ?? 0);
+
+        Alert.alert(
+          'Mark as paid?',
+          `This will mark Week ${weekNo} as paid (${formatPeso(due)}).`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Mark Paid',
+              style: 'default',
+              onPress: async () => {
+                try {
+                  setModes((prev) => ({ ...prev, [weekNo]: 'paid' }));
+                  await updateWeeklyPayment(loan.id, weekNo, { status: 'paid', paidAmount: due });
+                  await syncPaidAmount(loan.id);
+                  setWeeks(await listWeeklyPaymentsByLoan(loan.id));
+                } catch {
+                  // ignore
+                }
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       setModes((prev) => ({ ...prev, [weekNo]: mode }));
 
-      const row = weeks.find((w) => w.weekNo === weekNo);
-      const due = Math.max(0, row?.dueAmount ?? 0);
-
-      if (mode === 'paid') {
-        await updateWeeklyPayment(loan.id, weekNo, { status: 'paid', paidAmount: due });
-        await syncPaidAmount(loan.id);
-        setWeeks(await listWeeklyPaymentsByLoan(loan.id));
-      } else if (mode === 'unpaid') {
+      if (mode === 'unpaid') {
         await updateWeeklyPayment(loan.id, weekNo, { status: 'unpaid', paidAmount: 0 });
         await syncPaidAmount(loan.id);
         setWeeks(await listWeeklyPaymentsByLoan(loan.id));
@@ -381,6 +419,11 @@ export default function LoanDetailsScreen() {
               key={w.id}
               item={w}
               isDark={isDark}
+              isOverdue={(() => {
+                if (!loan?.createdAt) return false;
+                const dk = dueDateKeyUTC(loan.createdAt, w.weekNo);
+                return !!dk && dk < todayKey;
+              })()}
               selectedMode={modes[w.weekNo] ?? (w.paidAmount >= w.dueAmount && w.dueAmount > 0 ? 'paid' : w.paidAmount > 0 ? 'custom' : w.status === 'unpaid' ? 'unpaid' : null)}
               onSelectMode={(mode) => onSelectMode(w.weekNo, mode)}
               onApplyCustom={(amount) => onApplyCustom(w.weekNo, amount)}

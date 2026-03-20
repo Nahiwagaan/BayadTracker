@@ -27,24 +27,31 @@ function formatPeso(amount: number) {
   return `₱${Math.round(amount).toLocaleString()}`;
 }
 
-function Chip({ tone, label }: { tone: 'green' | 'orange' | 'gray'; label: string }) {
+function Chip({ tone, label, isDark }: { tone: 'green' | 'orange' | 'gray'; label: string; isDark?: boolean }) {
   const toneMap = {
-    green: { bg: '#E7FAEF', fg: '#1FBF6A' },
-    orange: { bg: '#FFF0E3', fg: '#FF8A3D' },
-    gray: { bg: '#EDF1F4', fg: '#8D98A2' },
+    green: isDark 
+      ? { bg: '#1FBF6A', fg: '#FFFFFF' }
+      : { bg: '#E7FAEF', fg: '#1FBF6A' },
+    orange: isDark
+      ? { bg: '#FF8A3D', fg: '#FFFFFF' }
+      : { bg: '#FFF0E3', fg: '#FF8A3D' },
+    gray: isDark
+      ? { bg: '#2C353D', fg: '#ECEDEE' }
+      : { bg: '#EDF1F4', fg: '#8D98A2' },
   } as const;
 
   const t = toneMap[tone];
 
   return (
     <View style={[styles.chip, { backgroundColor: t.bg }]}>
-      <Text style={[styles.chipText, { color: t.fg }]}>{label}</Text>
+      <Text style={[styles.chipText, { color: t.fg, fontWeight: isDark && tone !== 'gray' ? '900' : '800' }]}>{label}</Text>
     </View>
   );
 }
 
 function BorrowerLoanCard({ item, isDark }: { item: BorrowerListItem; isDark: boolean }) {
   const loan = item.loan;
+  const phone = (item.borrower.phoneNumber ?? '').trim();
 
   const total = loan?.totalAmount ?? 0;
   const paid = loan?.paidAmount ?? 0;
@@ -64,10 +71,20 @@ function BorrowerLoanCard({ item, isDark }: { item: BorrowerListItem; isDark: bo
 
   const remainingColor = remaining <= 0 ? '#1FBF6A' : '#FF3B30';
 
+  const onOpen = () => {
+    router.push({ pathname: '/borrower/[id]', params: { id: String(item.borrower.id) } });
+  };
+
   return (
-    <View style={[styles.card, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
+    <Pressable
+      onPress={onOpen}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: isDark ? '#141A20' : '#FFFFFF' },
+        pressed ? { opacity: 0.92 } : null,
+      ]}>
       <View style={styles.cardTopRow}>
-        <Chip tone={chipTone} label={chipLabel} />
+        <Chip tone={chipTone} label={chipLabel} isDark={isDark} />
         <View style={styles.remainingWrap}>
           <Text style={[styles.remainingLabel, { color: isDark ? '#77808A' : '#A0AAB3' }]}>Remaining</Text>
           <Text style={[styles.remainingValue, { color: remainingColor }]}>{formatPeso(remaining)}</Text>
@@ -76,15 +93,17 @@ function BorrowerLoanCard({ item, isDark }: { item: BorrowerListItem; isDark: bo
 
       <Text style={[styles.borrowerName, { color: isDark ? '#ECEDEE' : '#101822' }]}>{item.borrower.fullName}</Text>
 
+      {!!phone && (
+        <Text style={[styles.borrowerSub, { color: isDark ? '#9BA1A6' : '#86919B' }]} numberOfLines={1}>
+          {phone}
+        </Text>
+      )}
+
       <View style={styles.cardBottomRow}>
         <Text style={[styles.totalLabel, { color: isDark ? '#9BA1A6' : '#86919B' }]}>Total: {formatPeso(total)}</Text>
-        <Pressable
-          hitSlop={10}
-          onPress={() => router.push({ pathname: '/borrower/[id]', params: { id: String(item.borrower.id) } })}>
-          <Text style={styles.detailsLink}>Details {'>'}</Text>
-        </Pressable>
+        <Text style={styles.detailsLink}>Details {'>'}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -175,7 +194,7 @@ export default function BorrowersScreen() {
           </Pressable>
           <Pressable
             hitSlop={10}
-            onPress={() => {}}
+            onPress={() => router.push('/settings')}
             style={[styles.iconButton, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
             <MaterialIcons name="tune" size={22} color={isDark ? '#C7D0D8' : '#6D7781'} />
           </Pressable>
@@ -213,7 +232,7 @@ export default function BorrowersScreen() {
       <View pointerEvents="box-none" style={styles.addBorrowerWrap}>
         <Pressable
           onPress={() => router.push({ pathname: '/borrower/add' })}
-          style={styles.addBorrowerPill}
+          style={[styles.addBorrowerPill, isDark && { backgroundColor: '#1FBF6A', shadowOpacity: 0.3 }]}
           hitSlop={10}>
           <MaterialIcons name="add" size={20} color="#FFFFFF" />
           <Text style={[styles.addBorrowerText, { fontFamily: Fonts.rounded }]}>Add Borrower</Text>
@@ -373,6 +392,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#101822',
+  },
+  borrowerSub: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '700',
   },
   cardBottomRow: {
     marginTop: 10,

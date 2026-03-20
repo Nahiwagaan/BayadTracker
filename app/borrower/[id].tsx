@@ -1,14 +1,22 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Fonts } from '@/constants/theme';
 import { deleteBorrower, getBorrowerById, type Borrower } from '@/data/borrowers-db';
-import { deleteLoansByBorrower, listLoansByBorrower, type Loan } from '@/data/loans-db';
+import { deleteLoansByBorrower, listLoansByBorrower, setLoanPaidAmount, type Loan } from '@/data/loans-db';
+import {
+  computePaidAmountForLoan,
+  ensureWeeklyPaymentsForLoan,
+  listWeeklyPaymentsByLoan,
+  updateWeeklyPayment,
+  type WeeklyPaymentRow,
+} from '@/data/weekly-payments-db';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+
 
 function formatPeso(amount: number) {
   return `₱${Math.round(amount).toLocaleString()}`;
@@ -18,10 +26,85 @@ function pct(n: number) {
   return `${Math.round(Math.max(0, Math.min(100, n)))}%`;
 }
 
-function LoanPreviewCard({ loan, isDark }: { loan: Loan; isDark: boolean }) {
+function LoanPreviewCard({ loan, isDark, onRefresh }: { loan: Loan; isDark: boolean; onRefresh: () => void }) {
   const paid = Math.max(0, loan.paidAmount);
   const remaining = Math.max(0, loan.totalAmount - paid);
   const progress = loan.totalAmount > 0 ? Math.min(1, Math.max(0, paid / loan.totalAmount)) : 0;
+
+  const [currentWeek, setCurrentWeek] = useState<WeeklyPaymentRow | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customText, setCustomText] = useState('');
+  const [selectedMode, setSelectedMode] = useState<'paid' | 'custom' | null>(null);
+
+  const refreshCurrentWeek = useCallback(async () => {
+    await ensureWeeklyPaymentsForLoan(loan.id, loan.totalAmount, loan.durationWeeks);
+    const wp = await listWeeklyPaymentsByLoan(loan.id);
+    const firstUnpaid = wp.find((w) => (w.paidAmount ?? 0) < w.dueAmount);
+    setCurrentWeek(firstUnpaid || null);
+    if (firstUnpaid) {
+      setCustomText(String(Math.max(0, firstUnpaid.dueAmount - (firstUnpaid.paidAmount ?? 0))));
+    }
+  }, [loan.id, loan.totalAmount, loan.durationWeeks]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshCurrentWeek();
+    }, [refreshCurrentWeek])
+  );
+
+  const onQuickPay = async (mode: 'paid' | 'custom', customVal?: number) => {
+    if (!currentWeek) return;
+    setSelectedMode(mode);
+
+    if (mode === 'paid') {
+      Alert.alert(
+        'Mark as paid?',
+        `This will mark Week ${currentWeek.weekNo} as paid (₱${Math.round(currentWeek.dueAmount).toLocaleString()}).`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => {
+              setSelectedMode(null);
+            },
+          },
+          {
+            text: 'Mark Paid',
+            onPress: async () => {
+              try {
+                await updateWeeklyPayment(loan.id, currentWeek.weekNo, { status: 'paid', paidAmount: currentWeek.dueAmount });
+                const totalPaid = await computePaidAmountForLoan(loan.id);
+                await setLoanPaidAmount(loan.id, totalPaid);
+                onRefresh();
+                refreshCurrentWeek();
+                setCustomOpen(false);
+              } finally {
+                setSelectedMode(null);
+              }
+            },
+          },
+        ]
+      );
+      return;
+    } else if (mode === 'custom' && customVal !== undefined) {
+      const currentPaid = currentWeek.paidAmount ?? 0;
+      const nextPaid = Math.min(currentWeek.dueAmount, currentPaid + customVal);
+      await updateWeeklyPayment(loan.id, currentWeek.weekNo, {
+        status: nextPaid >= currentWeek.dueAmount ? 'paid' : 'pending',
+        paidAmount: nextPaid,
+      });
+    }
+
+    const totalPaid = await computePaidAmountForLoan(loan.id);
+    await setLoanPaidAmount(loan.id, totalPaid);
+    onRefresh();
+    refreshCurrentWeek();
+    setCustomOpen(false);
+    setSelectedMode(null);
+  };
+
+  const segmentOffBg = isDark ? '#0E1216' : '#EDF1F4';
+  const segmentOffText = isDark ? '#9BA1A6' : '#7A8590';
 
   return (
     <View style={[styles.loanCard, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
@@ -47,24 +130,88 @@ function LoanPreviewCard({ loan, isDark }: { loan: Loan; isDark: boolean }) {
       </View>
 
       <View style={styles.loanMiniRow}>
-        <View style={[styles.miniBox, { backgroundColor: isDark ? '#0E1216' : '#F4F7F8' }]}> 
+        <View style={[styles.miniBox, { backgroundColor: isDark ? '#0E1216' : '#F4F7F8' }]}>
           <Text style={[styles.miniLabel, { color: isDark ? '#77808A' : '#8C97A1' }]}>PAID</Text>
           <Text style={[styles.miniValue, { color: '#1FBF6A' }]}>{formatPeso(paid)}</Text>
         </View>
-        <View style={[styles.miniBox, { backgroundColor: isDark ? '#0E1216' : '#F4F7F8' }]}> 
+        <View style={[styles.miniBox, { backgroundColor: isDark ? '#0E1216' : '#F4F7F8' }]}>
           <Text style={[styles.miniLabel, { color: isDark ? '#77808A' : '#8C97A1' }]}>REMAINING</Text>
           <Text style={[styles.miniValue, { color: isDark ? '#ECEDEE' : '#101822' }]}>{formatPeso(remaining)}</Text>
         </View>
       </View>
 
+      {currentWeek ? (
+        <View style={styles.quickPayWrapper}>
+          <Text style={[styles.quickPayLabel, { color: isDark ? '#77808A' : '#8C97A1' }]}>
+            WEEK {currentWeek.weekNo} QUICK PAY ({formatPeso(currentWeek.dueAmount - (currentWeek.paidAmount ?? 0))} DUE)
+          </Text>
+          <View style={[styles.segmentWrap, { backgroundColor: segmentOffBg }]}>
+            <Pressable
+              onPress={() => onQuickPay('paid')}
+              disabled={selectedMode != null}
+              style={[
+                styles.segment,
+                selectedMode === 'paid' && { backgroundColor: '#1FBF6A' },
+              ]}>
+              <Text style={[styles.segmentText, { color: selectedMode === 'paid' ? '#FFFFFF' : segmentOffText }]}>
+                Paid
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setCustomOpen(!customOpen)}
+              disabled={selectedMode != null}
+              style={[
+                styles.segment,
+                (selectedMode === 'custom' || customOpen) && { backgroundColor: '#FF8A3D' },
+              ]}>
+              <Text style={[styles.segmentText, { color: (selectedMode === 'custom' || customOpen) ? '#FFFFFF' : segmentOffText }]}>
+                Custom
+              </Text>
+            </Pressable>
+          </View>
+
+          {customOpen && (
+            <View style={styles.customRow}>
+              <View style={[styles.customInput, { backgroundColor: isDark ? '#0E1216' : '#FFFFFF', borderColor: isDark ? '#141A20' : '#E6ECEF' }]}>
+                <Text style={[styles.customPeso, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>₱</Text>
+                <TextInput
+                  value={customText}
+                  onChangeText={setCustomText}
+                  keyboardType="numeric"
+                  style={[styles.customTextInput, { color: isDark ? '#ECEDEE' : '#101822' }]}
+                  placeholder="0"
+                  placeholderTextColor={isDark ? '#6E7781' : '#A6AFB7'}
+                />
+              </View>
+              <Pressable
+                onPress={() => onQuickPay('custom', Number(customText.replace(/[^0-9]/g, '')))}
+                style={styles.applyButton}>
+                <Text style={[styles.applyText, { fontFamily: Fonts.rounded }]}>Apply</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      ) : remaining > 0 ? (
+        <View style={styles.quickPayWrapper}>
+           <Text style={[styles.quickPayLabel, { color: '#1FBF6A', textAlign: 'center' }]}>LOAN FULLY PAID IN WEEKS</Text>
+        </View>
+      ) : null}
+
       <Pressable
         onPress={() => router.push({ pathname: '/loan/[id]', params: { id: String(loan.id) } })}
-        style={styles.viewDetailsButton}>
-        <Text style={[styles.viewDetailsText, { fontFamily: Fonts.rounded }]}>View Details {'>'}</Text>
+        style={[
+          styles.viewDetailsButton,
+          {
+            backgroundColor: isDark ? '#0E1216' : '#FFFFFF',
+            borderColor: isDark ? '#141A20' : '#E6ECEF',
+          },
+        ]}>
+        <Text style={[styles.viewDetailsText, { fontFamily: Fonts.rounded, color: isDark ? '#C7D0D8' : '#101822' }]}>View Details {'>'}</Text>
       </Pressable>
     </View>
   );
 }
+
 
 export default function BorrowerDetailsScreen() {
   const isDark = useColorScheme() === 'dark';
@@ -106,19 +253,34 @@ export default function BorrowerDetailsScreen() {
   );
 
   const activeLoans = loans.filter((l) => l.status === 'active');
+  const hasAnyLoan = loans.length > 0;
   const totalOwed = activeLoans.reduce((sum, l) => sum + l.totalAmount, 0);
   const totalPaid = activeLoans.reduce((sum, l) => sum + l.paidAmount, 0);
   const totalRemaining = Math.max(0, totalOwed - totalPaid);
 
   const onDelete = async () => {
     if (!Number.isFinite(borrowerId)) return;
-    try {
-      await deleteLoansByBorrower(borrowerId);
-      await deleteBorrower(borrowerId);
-      router.back();
-    } catch {
-      // ignore for now
-    }
+
+    Alert.alert(
+      'Delete borrower?',
+      'This will remove the borrower and all their loans from this device. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteLoansByBorrower(borrowerId);
+              await deleteBorrower(borrowerId);
+              router.back();
+            } catch {
+              Alert.alert('Delete failed', 'Could not delete borrower. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -151,6 +313,34 @@ export default function BorrowerDetailsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={[styles.contactCard, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
+          <View style={styles.contactRow}>
+            <View style={[styles.contactIcon, { backgroundColor: isDark ? '#0E1216' : '#EEF2F5' }]}>
+              <MaterialIcons name="call" size={18} color={isDark ? '#C7D0D8' : '#6D7781'} />
+            </View>
+            <View style={styles.contactText}>
+              <Text style={[styles.contactLabel, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Phone Number</Text>
+              <Text style={[styles.contactValue, { color: isDark ? '#ECEDEE' : '#101822' }]}>
+                {(borrower?.phoneNumber ?? '').trim() || '—'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.contactDivider} />
+
+          <View style={styles.contactRow}>
+            <View style={[styles.contactIcon, { backgroundColor: isDark ? '#0E1216' : '#EEF2F5' }]}>
+              <MaterialIcons name="location-on" size={18} color={isDark ? '#C7D0D8' : '#6D7781'} />
+            </View>
+            <View style={styles.contactText}>
+              <Text style={[styles.contactLabel, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Home Address</Text>
+              <Text style={[styles.contactValue, { color: isDark ? '#ECEDEE' : '#101822' }]}>
+                {(borrower?.homeAddress ?? '').trim() || '—'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         <View style={[styles.summaryCard, { backgroundColor: isDark ? '#0F2A1C' : '#E7FAEF' }]}>
           <Text style={[styles.summaryLabel, { color: isDark ? '#A7DCC0' : '#1FBF6A' }]}>TOTAL OWED</Text>
           <Text style={[styles.summaryAmount, { color: isDark ? '#E7FFF2' : '#101822' }]}>
@@ -179,7 +369,7 @@ export default function BorrowerDetailsScreen() {
         </View>
 
         {activeLoans.map((l) => (
-          <LoanPreviewCard key={l.id} loan={l} isDark={isDark} />
+          <LoanPreviewCard key={l.id} loan={l} isDark={isDark} onRefresh={refresh} />
         ))}
 
         {!activeLoans.length && (
@@ -200,7 +390,7 @@ export default function BorrowerDetailsScreen() {
           style={styles.addLoanButton}
           hitSlop={10}>
           <MaterialIcons name="add" size={18} color="#FFFFFF" />
-          <Text style={[styles.addLoanText, { fontFamily: Fonts.rounded }]}>Add Loan</Text>
+          <Text style={[styles.addLoanText, { fontFamily: Fonts.rounded }]}>{hasAnyLoan ? 'Renew Loan' : 'Add Loan'}</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -254,7 +444,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 24,
   },
+  contactCard: {
+    marginTop: 2,
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  contactIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactText: {
+    flex: 1,
+  },
+  contactLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  contactValue: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  contactDivider: {
+    height: 1,
+    backgroundColor: '#E6ECEF',
+    opacity: 0.6,
+    marginVertical: 12,
+    marginLeft: 46,
+  },
   summaryCard: {
+    marginTop: 12,
     borderRadius: 18,
     padding: 16,
     shadowColor: '#000',
@@ -435,6 +669,76 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   addLoanText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  quickPayWrapper: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E6ECEF',
+    gap: 10,
+  },
+  quickPayLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  segmentWrap: {
+    flexDirection: 'row',
+    borderRadius: 999,
+    padding: 4,
+    gap: 6,
+  },
+  segment: {
+    flex: 1,
+    height: 38,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  customRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  customInput: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E6ECEF',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  customPeso: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  customTextInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '900',
+    paddingVertical: 0,
+  },
+  applyButton: {
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: '#1FBF6A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',

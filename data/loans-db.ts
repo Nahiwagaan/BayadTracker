@@ -14,6 +14,7 @@ export type Loan = {
   paidAmount: number;
   status: LoanStatus;
   createdAt: string;
+  disbursementDate: string | null;
 };
 
 type CreateLoanInput = {
@@ -21,6 +22,7 @@ type CreateLoanInput = {
   principalAmount: number;
   interestAmount: number;
   durationWeeks: number;
+  disbursementDate?: string;
 };
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -38,10 +40,13 @@ export function initLoansDb() {
     const db = await getDb();
     await db.execAsync('PRAGMA foreign_keys = ON;');
     await db.execAsync(
-      "CREATE TABLE IF NOT EXISTS loans (id INTEGER PRIMARY KEY AUTOINCREMENT, borrower_id INTEGER NOT NULL, title TEXT NOT NULL, principal_amount INTEGER NOT NULL, interest_amount INTEGER NOT NULL DEFAULT 0, duration_weeks INTEGER NOT NULL DEFAULT 10, frequency TEXT NOT NULL DEFAULT 'weekly', total_amount INTEGER NOT NULL, paid_amount INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL);"
+      "CREATE TABLE IF NOT EXISTS loans (id INTEGER PRIMARY KEY AUTOINCREMENT, borrower_id INTEGER NOT NULL, title TEXT NOT NULL, principal_amount INTEGER NOT NULL, interest_amount INTEGER NOT NULL DEFAULT 0, duration_weeks INTEGER NOT NULL DEFAULT 10, frequency TEXT NOT NULL DEFAULT 'weekly', total_amount INTEGER NOT NULL, paid_amount INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL, disbursement_date TEXT);"
     );
 
-    // Lightweight migrations for dev while schema evolves.
+    // Lightweight migrations
+    try {
+      await db.execAsync('ALTER TABLE loans ADD COLUMN disbursement_date TEXT;');
+    } catch {}
     try {
       await db.execAsync('ALTER TABLE loans ADD COLUMN paid_amount INTEGER NOT NULL DEFAULT 0;');
     } catch {}
@@ -50,21 +55,6 @@ export function initLoansDb() {
     } catch {}
     try {
       await db.execAsync('ALTER TABLE loans ADD COLUMN created_at TEXT;');
-    } catch {}
-    try {
-      await db.execAsync('ALTER TABLE loans ADD COLUMN principal_amount INTEGER NOT NULL DEFAULT 0;');
-    } catch {}
-    try {
-      await db.execAsync('ALTER TABLE loans ADD COLUMN interest_amount INTEGER NOT NULL DEFAULT 0;');
-    } catch {}
-    try {
-      await db.execAsync('ALTER TABLE loans ADD COLUMN duration_weeks INTEGER NOT NULL DEFAULT 10;');
-    } catch {}
-    try {
-      await db.execAsync("ALTER TABLE loans ADD COLUMN frequency TEXT NOT NULL DEFAULT 'weekly';");
-    } catch {}
-    try {
-      await db.execAsync('ALTER TABLE loans ADD COLUMN total_amount INTEGER NOT NULL DEFAULT 0;');
     } catch {}
 
     await db.execAsync('CREATE INDEX IF NOT EXISTS idx_loans_borrower_id ON loans (borrower_id);');
@@ -84,13 +74,9 @@ export async function createLoan(input: CreateLoanInput) {
   const durationWeeks = Math.round(input.durationWeeks);
 
   if (!Number.isFinite(principalAmount) || principalAmount <= 0) throw new Error('Principal amount must be greater than 0');
-  if (!Number.isFinite(interestAmount) || interestAmount < 0) throw new Error('Interest amount must be 0 or greater');
-  if (!Number.isFinite(durationWeeks) || durationWeeks <= 0) throw new Error('Duration must be greater than 0');
-
   const totalAmount = principalAmount + interestAmount;
-  const frequency = 'weekly' as const;
-
   const createdAt = new Date().toISOString();
+  const disbursementDate = input.disbursementDate || createdAt;
 
   const db = await getDb();
   const seqRow = await db.getAllAsync<{ nextNo: number }>(
@@ -99,9 +85,10 @@ export async function createLoan(input: CreateLoanInput) {
   );
   const nextNo = seqRow[0]?.nextNo ?? 1;
   const title = `Personal Loan #${String(nextNo).padStart(3, '0')}`;
+  
   const result = await db.runAsync(
-    "INSERT INTO loans (borrower_id, title, principal_amount, interest_amount, duration_weeks, frequency, total_amount, paid_amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-    [borrowerId, title, principalAmount, interestAmount, durationWeeks, frequency, totalAmount, 0, 'active', createdAt]
+    "INSERT INTO loans (borrower_id, title, principal_amount, interest_amount, duration_weeks, frequency, total_amount, paid_amount, status, created_at, disbursement_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+    [borrowerId, title, principalAmount, interestAmount, durationWeeks, 'weekly', totalAmount, 0, 'active', createdAt, disbursementDate]
   );
 
   return result.lastInsertRowId as number;
@@ -111,8 +98,16 @@ export async function listLoansByBorrower(borrowerId: number) {
   await initLoansDb();
   const db = await getDb();
   return db.getAllAsync<Loan>(
-    "SELECT id, borrower_id as borrowerId, title, COALESCE(principal_amount, 0) as principalAmount, COALESCE(interest_amount, 0) as interestAmount, COALESCE(duration_weeks, 10) as durationWeeks, COALESCE(frequency, 'weekly') as frequency, total_amount as totalAmount, paid_amount as paidAmount, status, created_at as createdAt FROM loans WHERE borrower_id = ? ORDER BY id DESC;",
+    "SELECT id, borrower_id as borrowerId, title, COALESCE(principal_amount, 0) as principalAmount, COALESCE(interest_amount, 0) as interestAmount, COALESCE(duration_weeks, 10) as durationWeeks, COALESCE(frequency, 'weekly') as frequency, total_amount as totalAmount, paid_amount as paidAmount, status, created_at as createdAt, disbursement_date as disbursementDate FROM loans WHERE borrower_id = ? ORDER BY id DESC;",
     [borrowerId]
+  );
+}
+
+export async function listAllLoans() {
+  await initLoansDb();
+  const db = await getDb();
+  return db.getAllAsync<Loan>(
+    "SELECT id, borrower_id as borrowerId, title, COALESCE(principal_amount, 0) as principalAmount, COALESCE(interest_amount, 0) as interestAmount, COALESCE(duration_weeks, 10) as durationWeeks, COALESCE(frequency, 'weekly') as frequency, total_amount as totalAmount, paid_amount as paidAmount, status, created_at as createdAt, disbursement_date as disbursementDate FROM loans ORDER BY id DESC;"
   );
 }
 
@@ -120,7 +115,7 @@ export async function getLoanById(id: number) {
   await initLoansDb();
   const db = await getDb();
   const rows = await db.getAllAsync<Loan>(
-    "SELECT id, borrower_id as borrowerId, title, COALESCE(principal_amount, 0) as principalAmount, COALESCE(interest_amount, 0) as interestAmount, COALESCE(duration_weeks, 10) as durationWeeks, COALESCE(frequency, 'weekly') as frequency, total_amount as totalAmount, paid_amount as paidAmount, status, created_at as createdAt FROM loans WHERE id = ? LIMIT 1;",
+    "SELECT id, borrower_id as borrowerId, title, COALESCE(principal_amount, 0) as principalAmount, COALESCE(interest_amount, 0) as interestAmount, COALESCE(duration_weeks, 10) as durationWeeks, COALESCE(frequency, 'weekly') as frequency, total_amount as totalAmount, paid_amount as paidAmount, status, created_at as createdAt, disbursement_date as disbursementDate FROM loans WHERE id = ? LIMIT 1;",
     [id]
   );
   return rows[0] ?? null;
@@ -129,11 +124,25 @@ export async function getLoanById(id: number) {
 export async function setLoanPaidAmount(loanId: number, paidAmount: number) {
   await initLoansDb();
   const db = await getDb();
-  await db.runAsync('UPDATE loans SET paid_amount = ? WHERE id = ?;', [Math.max(0, Math.round(paidAmount)), loanId]);
+  const val = Math.max(0, Math.round(paidAmount));
+
+  // Auto-close if fully paid
+  const loan = await getLoanById(loanId);
+  if (loan && val >= loan.totalAmount && loan.status === 'active') {
+    await db.runAsync('UPDATE loans SET paid_amount = ?, status = ? WHERE id = ?;', [val, 'closed', loanId]);
+  } else {
+    await db.runAsync('UPDATE loans SET paid_amount = ? WHERE id = ?;', [val, loanId]);
+  }
 }
 
 export async function deleteLoansByBorrower(borrowerId: number) {
   await initLoansDb();
   const db = await getDb();
   await db.runAsync('DELETE FROM loans WHERE borrower_id = ?;', [borrowerId]);
+}
+
+export async function deleteLoan(id: number) {
+  await initLoansDb();
+  const db = await getDb();
+  await db.runAsync('DELETE FROM loans WHERE id = ?;', [id]);
 }

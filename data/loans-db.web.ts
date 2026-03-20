@@ -64,6 +64,10 @@ export async function listLoansByBorrower(borrowerId: number) {
   return _rows.filter((l) => l.borrowerId === borrowerId);
 }
 
+export async function listAllLoans() {
+  return _rows;
+}
+
 export async function getLoanById(id: number) {
   return _rows.find((l) => l.id === id) ?? null;
 }
