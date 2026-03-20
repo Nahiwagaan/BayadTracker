@@ -1,4 +1,4 @@
-# 💰 BayadTracker
+# <img src="assets/images/BayadTrackerLogo.png" alt="BayadTracker" width="24"> BayadTracker
 
 **BayadTracker** is a premium, lightweight loan and borrower management app designed for simplicity and efficiency. Built with **Expo** and **SQLite**, it helps you track collections, manage weekly installments, and stay on top of your lending business—all from your mobile device.
 
