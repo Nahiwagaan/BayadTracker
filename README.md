@@ -1,48 +1,42 @@
-# BayadTracker
+# 💰 BayadTracker
 
-BayadTracker is a lightweight loan and borrower tracker built with Expo + Expo Router and backed by local SQLite.
+**BayadTracker** is a premium, lightweight loan and borrower management app designed for simplicity and efficiency. Built with **Expo** and **SQLite**, it helps you track collections, manage weekly installments, and stay on top of your lending business—all from your mobile device.
 
-Track borrowers, create loans with weekly terms, and mark each week as paid/unpaid or apply partial payments with a custom amount. Loan totals and remaining balances update automatically based on what you record.
+---
 
-## Features
+## 📲 Download & Install
 
-- Borrowers list with search
-- Borrower details with loan summary and active loans
-- Create loans (principal, interest, duration in weeks)
-- Loan details with interactive weekly payments (paid/unpaid/custom + partial payments)
-- Local-first storage using `expo-sqlite`
+You can download the latest **Android APK** directly from the link below:
 
-## Get started
+### [📥 Download BayadTracker v1.0.0 (APK)](https://expo.dev/accounts/nahiwagaan/projects/BayadTracker/builds/4623718b-5ef1-4c69-9b56-fac10bfa2577)
 
-1. Install dependencies
+> **Note for Installation:** Since this is a custom-built app, Android might show a "Play Protect" warning. Simply click **"Install Anyway"** to proceed with the installation.
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+## ✨ Key Features
 
-   ```bash
-   npx expo start
-   ```
+- 👤 **Borrower Management**: Effortlessly add and search for borrowers. Store essential contact info and addresses.
+- 💸 **Smart Loan Creation**: Set default principal, interest, and duration (e.g., 10 weeks) for faster data entry.
+- 📅 **Interactive Weekly Payments**: Mark installments as **Paid**, **Unpaid**, or apply **Custom/Partial** amounts with a single tap.
+- 📊 **Real-time Dashboard**: Stay informed with the "Collect Today" report and outstanding unpaid tracking.
+- 🌓 **Dark Mode Support**: A beautiful, premium UI that adapts to your system theme.
+- 🔒 **Local & Private**: All data is stored locally on your device via `expo-sqlite`. No cloud, no internet required.
 
-In the output, you'll find options to open the app in a
+---
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 🏗️ Technology Stack
 
-You can start developing by editing the files inside the `app` directory. This project uses file-based routing via Expo Router.
+- **Framework**: [Expo SDK 54](https://expo.dev/)
+- **Navigation**: [Expo Router](https://docs.expo.dev/router/introduction/)
+- **Database**: [expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/)
+- **UI Components**: React Native with custom premium styling.
 
-## Notes
+---
 
-- Data is stored locally in `bayadtracker.db` using SQLite.
-- On Android/iOS, clearing app storage will reset local data.
+## 🧹 Data Management
+You can reset all app data at any time via the **Settings** page. This is useful for testing or starting a new collection year. Use with caution as this action is irreversible.
 
-## Tech
+---
 
-- Expo SDK
-- Expo Router
-- React Native
-- SQLite (`expo-sqlite`)
+*Made with ❤️ for MOM.*
