@@ -304,12 +304,21 @@ export default function BorrowerDetailsScreen() {
           {borrower?.fullName ?? 'Borrower'}
         </Text>
 
-        <Pressable
-          hitSlop={10}
-          onPress={onDelete}
-          style={[styles.iconButton, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
-          <MaterialIcons name="delete-outline" size={22} color="#FF3B30" />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            hitSlop={10}
+            onPress={() => router.push({ pathname: '/borrower/edit', params: { id: String(borrowerId) } })}
+            style={[styles.iconButton, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
+            <MaterialIcons name="edit" size={20} color={isDark ? '#ECEDEE' : '#101822'} />
+          </Pressable>
+
+          <Pressable
+            hitSlop={10}
+            onPress={onDelete}
+            style={[styles.iconButton, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
+            <MaterialIcons name="delete-outline" size={22} color="#FF3B30" />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -423,10 +432,14 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 14,
+    textAlign: 'left',
+    fontSize: 16,
     fontWeight: '900',
     paddingHorizontal: 12,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
   },
   iconButton: {
     width: 38,

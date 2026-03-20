@@ -92,3 +92,29 @@ export async function getBorrowerById(id: number) {
   );
   return rows[0] ?? null;
 }
+
+export async function updateBorrower(id: number, input: Partial<CreateBorrowerInput>) {
+  await initBorrowersDb();
+  const db = await getDb();
+
+  const sets: string[] = [];
+  const args: any[] = [];
+
+  if (input.fullName !== undefined) {
+    sets.push('full_name = ?');
+    args.push(input.fullName.trim());
+  }
+  if (input.phoneNumber !== undefined) {
+    sets.push('phone_number = ?');
+    args.push(input.phoneNumber.trim() || null);
+  }
+  if (input.homeAddress !== undefined) {
+    sets.push('home_address = ?');
+    args.push(input.homeAddress.trim() || null);
+  }
+
+  if (sets.length === 0) return;
+
+  args.push(id);
+  await db.runAsync(`UPDATE borrowers SET ${sets.join(', ')} WHERE id = ?;`, args);
+}
