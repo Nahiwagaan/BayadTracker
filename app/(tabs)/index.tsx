@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   addBorrowerWrap: {
     position: 'absolute',
     right: 0,
-    bottom: 90,
+    bottom: 20,
     paddingRight: 18,
     alignItems: 'flex-end',
   },

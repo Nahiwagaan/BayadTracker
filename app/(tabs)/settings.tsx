@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,13 +13,17 @@ export default function SettingsScreen() {
   const isDark = useColorScheme() === 'dark';
   
   const [principal, setPrincipal] = useState('5000');
-  const [interest, setInterest] = useState('1000');
   const [weeks, setWeeks] = useState('10');
+
+  const computedInterest = useMemo(() => {
+    const n = Number((principal || '').replace(/[^0-9]/g, ''));
+    const principalValue = Number.isFinite(n) ? n : 0;
+    return Math.round(principalValue * 0.2);
+  }, [principal]);
 
   const loadSettings = useCallback(async () => {
     const s = await getSettings();
     setPrincipal(String(s.defaultPrincipal));
-    setInterest(String(s.defaultInterest));
     setWeeks(String(s.defaultDuration));
   }, []);
 
@@ -32,14 +36,12 @@ export default function SettingsScreen() {
   const onUpdatePrincipal = async (val: string) => {
     setPrincipal(val);
     if (val.trim()) {
-      await updateSetting('defaultPrincipal', val.replace(/[^0-9]/g, ''));
-    }
-  };
-
-  const onUpdateInterest = async (val: string) => {
-    setInterest(val);
-    if (val.trim()) {
-      await updateSetting('defaultInterest', val.replace(/[^0-9]/g, ''));
+      const cleaned = val.replace(/[^0-9]/g, '');
+      const n = Number(cleaned);
+      const p = Number.isFinite(n) ? n : 0;
+      await updateSetting('defaultPrincipal', String(p));
+      // Keep compatibility for any code still reading this key.
+      await updateSetting('defaultInterest', String(Math.round(p * 0.2)));
     }
   };
 
@@ -102,15 +104,12 @@ export default function SettingsScreen() {
 
           <View style={styles.spacer} />
 
-          <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Default Interest</Text>
-          <View style={[styles.inputWrap, { backgroundColor: isDark ? '#0E1216' : '#F4F7F8' }]}>
+          <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Default Interest (Auto 20%)</Text>
+          <View style={[styles.inputWrap, { backgroundColor: isDark ? '#0E1216' : '#F4F7F8' }]}> 
             <Text style={[styles.inputIconText, { color: '#1FBF6A' }]}>₱</Text>
-            <TextInput
-              value={interest}
-              onChangeText={onUpdateInterest}
-              keyboardType="numeric"
-              style={[styles.input, { color: isDark ? '#ECEDEE' : '#101822' }]}
-            />
+            <Text style={[styles.input, styles.readOnlyInput, { color: isDark ? '#ECEDEE' : '#101822' }]}> 
+              {computedInterest.toLocaleString()}
+            </Text>
           </View>
 
           <View style={styles.spacer} />
@@ -227,8 +226,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: '800',
-    textAlign: 'right',
     fontFamily: Fonts.rounded,
+  },
+  readOnlyInput: {
+    paddingVertical: 12,
   },
   iconShift: {
     marginLeft: -2,

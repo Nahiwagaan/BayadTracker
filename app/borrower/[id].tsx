@@ -17,9 +17,24 @@ import {
 } from '@/data/weekly-payments-db';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 
 function formatPeso(amount: number) {
   return `₱${Math.round(amount).toLocaleString()}`;
+}
+
+function formatDueDateFromLoan(loan: Loan, weekNo: number) {
+  const scheduleStartAt = loan.disbursementDate ?? loan.createdAt;
+  const base = Date.parse(scheduleStartAt);
+  if (!Number.isFinite(base)) return `Week ${weekNo}`;
+
+  const due = new Date(base + (Math.max(1, weekNo) - 1) * 7 * DAY_MS);
+  return due.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function pct(n: number) {
@@ -52,8 +67,26 @@ function LoanPreviewCard({ loan, isDark, onRefresh }: { loan: Loan; isDark: bool
     }, [refreshCurrentWeek])
   );
 
-  const onQuickPay = async (mode: 'paid' | 'custom', customVal?: number) => {
+  const onQuickPay = async (mode: 'paid' | 'custom', customVal?: number, confirmed = false) => {
     if (!currentWeek) return;
+
+    if (mode === 'paid' && !confirmed) {
+      const dueNow = Math.max(0, currentWeek.dueAmount - (currentWeek.paidAmount ?? 0));
+      Alert.alert(
+        'Mark as paid?',
+        `This will apply ${formatPeso(dueNow)} to ${formatDueDateFromLoan(loan, currentWeek.weekNo)}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Mark Paid',
+            onPress: () => {
+              void onQuickPay('paid', undefined, true);
+            },
+          },
+        ]
+      );
+      return;
+    }
 
     let remainingToApply = 0;
     if (mode === 'paid') {
@@ -141,8 +174,8 @@ function LoanPreviewCard({ loan, isDark, onRefresh }: { loan: Loan; isDark: bool
 
       {currentWeek ? (
         <View style={styles.quickPayWrapper}>
-          <Text style={[styles.quickPayLabel, { color: isDark ? '#77808A' : '#8C97A1' }]}>
-            WEEK {currentWeek.weekNo} QUICK PAY ({formatPeso(currentWeek.dueAmount - (currentWeek.paidAmount ?? 0))} DUE)
+          <Text style={[styles.quickPayLabel, { color: isDark ? '#77808A' : '#8C97A1' }]}> 
+            {formatDueDateFromLoan(loan, currentWeek.weekNo)} QUICK PAY ({formatPeso(currentWeek.dueAmount - (currentWeek.paidAmount ?? 0))} DUE)
           </Text>
           <View style={[styles.segmentWrap, { backgroundColor: segmentOffBg }]}>
             <Pressable
@@ -252,6 +285,7 @@ export default function BorrowerDetailsScreen() {
   );
 
   const activeLoans = loans.filter((l) => l.status === 'active');
+  const historyLoans = loans.filter((l) => l.status !== 'active' || l.paidAmount >= l.totalAmount);
   const hasAnyLoan = loans.length > 0;
   const totalOwed = activeLoans.reduce((sum, l) => sum + l.totalAmount, 0);
   const totalPaid = activeLoans.reduce((sum, l) => sum + l.paidAmount, 0);
@@ -381,12 +415,42 @@ export default function BorrowerDetailsScreen() {
         ))}
 
         {!activeLoans.length && (
-          <View style={[styles.emptyCard, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
+          <View style={[styles.emptyCard, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}> 
             <Text style={[styles.emptyTitle, { color: isDark ? '#ECEDEE' : '#101822' }]}>No active loans</Text>
-            <Text style={[styles.emptyBody, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>
+            <Text style={[styles.emptyBody, { color: isDark ? '#9BA1A6' : '#7A8590' }]}> 
               Tap Add Loan to create the first loan.
             </Text>
           </View>
+        )}
+
+        {!!historyLoans.length && (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={[styles.sectionTitle, { color: isDark ? '#ECEDEE' : '#101822' }]}>Loan History</Text>
+              <View style={[styles.activeChip, { backgroundColor: isDark ? '#0E1216' : '#EEF2F5' }]}>
+                <Text style={[styles.activeChipText, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>
+                  {historyLoans.length} Completed
+                </Text>
+              </View>
+            </View>
+
+            {historyLoans.map((l) => (
+              <Pressable
+                key={`history-${l.id}`}
+                onPress={() => router.push({ pathname: '/loan/[id]', params: { id: String(l.id) } })}
+                style={[styles.historyCard, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
+                <View>
+                  <Text style={[styles.historyTitle, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>{l.title}</Text>
+                  <Text style={[styles.historyAmount, { color: isDark ? '#ECEDEE' : '#101822' }]}>
+                    {formatPeso(l.totalAmount)}
+                  </Text>
+                </View>
+                <View style={[styles.historyPill, { backgroundColor: isDark ? '#0F2A1C' : '#E7FAEF' }]}>
+                  <Text style={[styles.historyPillText, { color: '#1FBF6A' }]}>PAID</Text>
+                </View>
+              </Pressable>
+            ))}
+          </>
         )}
 
         <View style={styles.bottomSpacer} />
@@ -571,6 +635,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '700',
+  },
+  historyCard: {
+    marginTop: 10,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  historyTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  historyAmount: {
+    marginTop: 4,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  historyPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  historyPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.7,
   },
   loanCard: {
     marginTop: 12,

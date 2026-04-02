@@ -42,13 +42,11 @@ export default function AddLoanScreen() {
   const [borrowerName, setBorrowerName] = useState<string>('');
 
   const [principal, setPrincipal] = useState('5000');
-  const [interest, setInterest] = useState('1000');
   const [weeks, setWeeks] = useState('10');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const principalRef = useRef<TextInput>(null);
-  const interestRef = useRef<TextInput>(null);
   const weeksRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -63,7 +61,6 @@ export default function AddLoanScreen() {
         const s = await getSettings();
         if (!cancelled) {
           setPrincipal(String(s.defaultPrincipal));
-          setInterest(String(s.defaultInterest));
           setWeeks(String(s.defaultDuration));
         }
       } catch {
@@ -76,14 +73,14 @@ export default function AddLoanScreen() {
   }, [borrowerId]);
 
   const principalAmount = useMemo(() => parseIntSafe(principal), [principal]);
-  const interestAmount = useMemo(() => parseIntSafe(interest), [interest]);
+  const interestAmount = useMemo(() => Math.round(principalAmount * 0.2), [principalAmount]);
   const durationWeeks = useMemo(() => Math.max(1, parseIntSafe(weeks)), [weeks]);
   const totalAmount = principalAmount + interestAmount;
   const weeklyPayment = durationWeeks > 0 ? totalAmount / durationWeeks : 0;
 
   const canSave = useMemo(() => {
-    return principalAmount > 0 && interestAmount >= 0 && durationWeeks > 0 && Number.isFinite(borrowerId);
-  }, [principalAmount, interestAmount, durationWeeks, borrowerId]);
+    return principalAmount > 0 && durationWeeks > 0 && Number.isFinite(borrowerId);
+  }, [principalAmount, durationWeeks, borrowerId]);
 
   const onSave = async () => {
     if (!canSave || saving) return;
@@ -138,25 +135,17 @@ export default function AddLoanScreen() {
             style={[styles.input, { fontFamily: Fonts.rounded, color: isDark ? '#ECEDEE' : '#0E1620' }]}
             keyboardType="numeric"
             returnKeyType="next"
-            onSubmitEditing={() => interestRef.current?.focus()}
+            onSubmitEditing={() => weeksRef.current?.focus()}
           />
           <MaterialIcons name="payments" size={18} color="#1FBF6A" />
         </View>
 
-        <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>INTEREST AMOUNT</Text>
-        <View style={[styles.inputWrap, { backgroundColor: isDark ? '#141A20' : '#FFFFFF', borderColor: '#DFF3E9' }]}>
+        <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>INTEREST AMOUNT (AUTO 20%)</Text>
+        <View style={[styles.inputWrap, { backgroundColor: isDark ? '#141A20' : '#FFFFFF', borderColor: '#DFF3E9' }]}> 
           <MoneyPill isDark={isDark} />
-          <TextInput
-            ref={interestRef}
-            value={interest}
-            onChangeText={setInterest}
-            placeholder="0"
-            placeholderTextColor={isDark ? '#8A9299' : '#9AA4AD'}
-            style={[styles.input, { fontFamily: Fonts.rounded, color: isDark ? '#ECEDEE' : '#0E1620' }]}
-            keyboardType="numeric"
-            returnKeyType="next"
-            onSubmitEditing={() => weeksRef.current?.focus()}
-          />
+          <Text style={[styles.input, styles.inputReadOnly, { fontFamily: Fonts.rounded, color: isDark ? '#ECEDEE' : '#0E1620' }]}>
+            {interestAmount.toLocaleString()}
+          </Text>
           <MaterialIcons name="trending-up" size={18} color="#1FBF6A" />
         </View>
 
@@ -302,6 +291,9 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 14,
+  },
+  inputReadOnly: {
+    fontWeight: '800',
   },
   summaryCard: {
     marginTop: 18,

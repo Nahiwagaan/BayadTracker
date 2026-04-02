@@ -128,11 +128,10 @@ export async function setLoanPaidAmount(loanId: number, paidAmount: number) {
 
   // Auto-close if fully paid
   const loan = await getLoanById(loanId);
-  if (loan && val >= loan.totalAmount && loan.status === 'active') {
-    await db.runAsync('UPDATE loans SET paid_amount = ?, status = ? WHERE id = ?;', [val, 'closed', loanId]);
-  } else {
-    await db.runAsync('UPDATE loans SET paid_amount = ? WHERE id = ?;', [val, loanId]);
-  }
+  if (!loan) return;
+
+  const nextStatus = val >= loan.totalAmount ? 'closed' : 'active';
+  await db.runAsync('UPDATE loans SET paid_amount = ?, status = ? WHERE id = ?;', [val, nextStatus, loanId]);
 }
 
 export async function deleteLoansByBorrower(borrowerId: number) {

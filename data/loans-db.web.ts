@@ -79,5 +79,7 @@ export async function deleteLoansByBorrower(borrowerId: number) {
 export async function setLoanPaidAmount(loanId: number, paidAmount: number) {
   const idx = _rows.findIndex((l) => l.id === loanId);
   if (idx === -1) return;
-  _rows[idx] = { ..._rows[idx], paidAmount: Math.max(0, Math.round(paidAmount)) };
+  const val = Math.max(0, Math.round(paidAmount));
+  const status: LoanStatus = val >= _rows[idx].totalAmount ? 'closed' : 'active';
+  _rows[idx] = { ..._rows[idx], paidAmount: val, status };
 }

@@ -22,11 +22,23 @@ function dateKeyUTC(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-function dueDateKeyUTC(loanCreatedAt: string, weekNo: number) {
-  const base = Date.parse(loanCreatedAt);
+function dueDateKeyUTC(scheduleStartAt: string, weekNo: number) {
+  const base = Date.parse(scheduleStartAt);
   if (!Number.isFinite(base)) return null;
   const due = new Date(base + (Math.max(1, weekNo) - 1) * 7 * DAY_MS);
   return dateKeyUTC(due);
+}
+
+function formatDueDate(scheduleStartAt: string, weekNo: number) {
+  const base = Date.parse(scheduleStartAt);
+  if (!Number.isFinite(base)) return `Week ${weekNo}`;
+
+  const due = new Date(base + (Math.max(1, weekNo) - 1) * 7 * DAY_MS);
+  return due.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 function formatPeso(amount: number) {
@@ -43,6 +55,8 @@ function PaymentRow({
   item,
   isDark,
   isOverdue,
+  editable,
+  dueDateLabel,
   selectedMode,
   onSelectMode,
   onApplyCustom,
@@ -50,6 +64,8 @@ function PaymentRow({
   item: WeeklyPaymentRow;
   isDark: boolean;
   isOverdue: boolean;
+  editable: boolean;
+  dueDateLabel: string;
   selectedMode: 'paid' | 'unpaid' | 'custom' | null;
   onSelectMode: (mode: 'paid' | 'unpaid' | 'custom') => void;
   onApplyCustom: (amountToApply: number) => void;
@@ -136,12 +152,12 @@ function PaymentRow({
           <MaterialIcons name={circle.icon} size={16} color={circle.fg} />
         </View>
         <View style={styles.paymentText}>
-          <Text style={[styles.paymentWeek, { color: isDark ? '#ECEDEE' : '#101822' }]}>Week {item.weekNo}</Text>
+          <Text style={[styles.paymentWeek, { color: isDark ? '#ECEDEE' : '#101822' }]}>{dueDateLabel}</Text>
           <View style={styles.metaRow}>
-            <Text style={[styles.paymentMeta, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>
+            <Text style={[styles.paymentMeta, { color: isDark ? '#9BA1A6' : '#7A8590' }]}> 
               Due: {formatPeso(due)}
             </Text>
-            <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}>
+            <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}> 
               <Text style={[styles.statusPillText, { color: statusPill.fg }]}>{statusLabel}</Text>
             </View>
           </View>
@@ -150,52 +166,51 @@ function PaymentRow({
             {derivedState === 'partial' ? ` • ${formatPeso(remaining)} remaining` : ''}
           </Text>
         </View>
-        <Pressable hitSlop={10} onPress={() => {}} style={styles.dotsButton}>
-          <MaterialIcons name="more-vert" size={18} color={isDark ? '#6E7781' : '#A6AFB7'} />
-        </Pressable>
       </View>
 
-      <View style={styles.segmentWrap}> 
-        <Pressable
-          onPress={() => onSelectMode('paid')}
-          style={[
-            styles.segment,
-            { backgroundColor: segmentOffBg },
-            selectedMode === 'paid' && { backgroundColor: '#1FBF6A' },
-          ]}>
-          <Text style={[styles.segmentText, { color: selectedMode === 'paid' ? '#FFFFFF' : segmentOffText }]}>
-            Paid
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => onSelectMode('unpaid')}
-          style={[
-            styles.segment,
-            { backgroundColor: segmentOffBg },
-            selectedMode === 'unpaid' && { backgroundColor: '#FF3B30' },
-          ]}>
-          <Text style={[styles.segmentText, { color: selectedMode === 'unpaid' ? '#FFFFFF' : segmentOffText }]}>
-            Unpaid
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            const nextOpen = selectedMode === 'custom' ? !customOpen : true;
-            onSelectMode('custom');
-            setCustomOpen(nextOpen);
-          }}
-          style={[
-            styles.segment,
-            { backgroundColor: segmentOffBg },
-            selectedMode === 'custom' && { backgroundColor: '#FF8A3D' },
-          ]}>
-          <Text style={[styles.segmentText, { color: selectedMode === 'custom' ? '#FFFFFF' : segmentOffText }]}>
-            Custom
-          </Text>
-        </Pressable>
-      </View>
+      {editable && (
+        <View style={styles.segmentWrap}> 
+          <Pressable
+            onPress={() => onSelectMode('paid')}
+            style={[
+              styles.segment,
+              { backgroundColor: segmentOffBg },
+              selectedMode === 'paid' && { backgroundColor: '#1FBF6A' },
+            ]}>
+            <Text style={[styles.segmentText, { color: selectedMode === 'paid' ? '#FFFFFF' : segmentOffText }]}> 
+              Paid
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => onSelectMode('unpaid')}
+            style={[
+              styles.segment,
+              { backgroundColor: segmentOffBg },
+              selectedMode === 'unpaid' && { backgroundColor: '#FF3B30' },
+            ]}>
+            <Text style={[styles.segmentText, { color: selectedMode === 'unpaid' ? '#FFFFFF' : segmentOffText }]}> 
+              Unpaid
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              const nextOpen = selectedMode === 'custom' ? !customOpen : true;
+              onSelectMode('custom');
+              setCustomOpen(nextOpen);
+            }}
+            style={[
+              styles.segment,
+              { backgroundColor: segmentOffBg },
+              selectedMode === 'custom' && { backgroundColor: '#FF8A3D' },
+            ]}>
+            <Text style={[styles.segmentText, { color: selectedMode === 'custom' ? '#FFFFFF' : segmentOffText }]}> 
+              Custom
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
-      {selectedMode === 'custom' && customOpen && (
+      {editable && selectedMode === 'custom' && customOpen && (
         <View style={styles.customRow}>
           <View style={[styles.customInput, { backgroundColor: isDark ? '#0E1216' : '#FFFFFF' }]}>
             <Text style={[styles.customPeso, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>₱</Text>
@@ -285,6 +300,8 @@ export default function LoanDetailsScreen() {
   const paid = Math.max(0, loan?.paidAmount ?? 0);
   const remaining = Math.max(0, total - paid);
   const progress = total > 0 ? Math.min(1, Math.max(0, paid / total)) : 0;
+  const isEditable = loan?.status === 'active';
+  const scheduleStartAt = loan?.disbursementDate ?? loan?.createdAt ?? '';
 
   const syncPaidAmount = useCallback(
     async (id: number) => {
@@ -299,13 +316,14 @@ export default function LoanDetailsScreen() {
   const onSelectMode = useCallback(
     async (weekNo: number, mode: 'paid' | 'unpaid' | 'custom') => {
       if (!loan) return;
+      if (loan.status !== 'active') return;
       if (mode === 'paid') {
         const row = weeks.find((w) => w.weekNo === weekNo);
         const due = Math.max(0, row?.dueAmount ?? 0);
 
         Alert.alert(
           'Mark as paid?',
-          `This will mark Week ${weekNo} as paid (${formatPeso(due)}).`,
+          `This will mark ${formatDueDate(scheduleStartAt, weekNo)} as paid (${formatPeso(due)}).`,
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -336,12 +354,13 @@ export default function LoanDetailsScreen() {
       }
       // custom waits for Apply
     },
-    [loan, syncPaidAmount, weeks]
+    [loan, scheduleStartAt, syncPaidAmount, weeks]
   );
 
   const onApplyCustom = useCallback(
     async (weekNo: number, amount: number) => {
       if (!loan) return;
+      if (loan.status !== 'active') return;
 
       let remainingToApply = Math.max(0, Math.round(amount));
       if (remainingToApply <= 0) return;
@@ -447,16 +466,24 @@ export default function LoanDetailsScreen() {
               item={w}
               isDark={isDark}
               isOverdue={(() => {
-                if (!loan?.createdAt) return false;
-                const dk = dueDateKeyUTC(loan.createdAt, w.weekNo);
+                if (!scheduleStartAt) return false;
+                const dk = dueDateKeyUTC(scheduleStartAt, w.weekNo);
                 return !!dk && dk < todayKey;
               })()}
+              editable={isEditable}
+              dueDateLabel={scheduleStartAt ? formatDueDate(scheduleStartAt, w.weekNo) : `Week ${w.weekNo}`}
               selectedMode={modes[w.weekNo] ?? (w.paidAmount >= w.dueAmount && w.dueAmount > 0 ? 'paid' : w.paidAmount > 0 ? 'custom' : w.status === 'unpaid' ? 'unpaid' : null)}
               onSelectMode={(mode) => onSelectMode(w.weekNo, mode)}
               onApplyCustom={(amount) => onApplyCustom(w.weekNo, amount)}
             />
           ))}
         </View>
+
+        {!isEditable && !!loan && (
+          <Text style={[styles.readOnlyNote, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>
+            This loan is in history and is read-only.
+          </Text>
+        )}
 
         {!loan && (
           <View style={[styles.emptyCard, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
@@ -574,6 +601,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     gap: 10,
   },
+  readOnlyNote: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   emptyCard: {
     marginTop: 14,
     borderRadius: 18,
@@ -645,13 +677,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.6,
-  },
-  dotsButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   segmentWrap: {
     flexDirection: 'row',

@@ -30,7 +30,6 @@ export default function AddBorrowerScreen() {
 
   // Optional: create first loan while adding borrower.
   const [principal, setPrincipal] = useState('5000');
-  const [interest, setInterest] = useState('1000');
   const [weeks, setWeeks] = useState('10');
 
   useFocusEffect(
@@ -38,7 +37,6 @@ export default function AddBorrowerScreen() {
       (async () => {
         const s = await getSettings();
         setPrincipal(String(s.defaultPrincipal));
-        setInterest(String(s.defaultInterest));
         setWeeks(String(s.defaultDuration));
       })();
     }, [])
@@ -48,7 +46,7 @@ export default function AddBorrowerScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const principalAmount = useMemo(() => parseIntSafe(principal), [principal]);
-  const interestAmount = useMemo(() => parseIntSafe(interest), [interest]);
+  const interestAmount = useMemo(() => Math.round(principalAmount * 0.2), [principalAmount]);
   const durationWeeks = useMemo(() => Math.max(1, parseIntSafe(weeks) || 10), [weeks]);
   const totalAmount = principalAmount + interestAmount;
   const weeklyPayment = durationWeeks > 0 ? totalAmount / durationWeeks : 0;
@@ -57,8 +55,8 @@ export default function AddBorrowerScreen() {
   const canSave = useMemo(() => {
     if (fullName.trim().length === 0) return false;
     if (!willCreateLoan) return true;
-    return interestAmount >= 0 && durationWeeks > 0;
-  }, [durationWeeks, fullName, interestAmount, willCreateLoan]);
+    return durationWeeks > 0;
+  }, [durationWeeks, fullName, willCreateLoan]);
 
   const onSave = async () => {
     if (!canSave || saving) return;
@@ -168,8 +166,8 @@ export default function AddBorrowerScreen() {
           <View style={styles.divider} />
 
           <Text style={[styles.sectionTitle, { color: isDark ? '#ECEDEE' : '#101822' }]}>Loan (Optional)</Text>
-          <Text style={[styles.hint, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>
-            Fill this out to create the first loan automatically. You can renew later.
+          <Text style={[styles.hint, { color: isDark ? '#9BA1A6' : '#7A8590' }]}> 
+            Fill this out to create the first loan automatically. Interest is fixed at 20% of principal.
           </Text>
 
           <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Principal Amount</Text>
@@ -186,18 +184,12 @@ export default function AddBorrowerScreen() {
             />
           </View>
 
-          <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Interest Amount</Text>
+          <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Interest Amount (Auto 20%)</Text>
           <View style={[styles.inputWrap, { backgroundColor: isDark ? '#141A20' : '#FFFFFF' }]}>
             <Text style={[styles.prefix, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>₱</Text>
-            <TextInput
-              value={interest}
-              onChangeText={setInterest}
-              placeholder="0"
-              placeholderTextColor={isDark ? '#8A9299' : '#9AA4AD'}
-              style={[styles.input, { fontFamily: Fonts.rounded, color: isDark ? '#ECEDEE' : '#0E1620' }]}
-              keyboardType="numeric"
-              returnKeyType="next"
-            />
+            <Text style={[styles.inputReadOnly, { color: isDark ? '#ECEDEE' : '#0E1620', fontFamily: Fonts.rounded }]}>
+              {interestAmount.toLocaleString()}
+            </Text>
           </View>
 
           <Text style={[styles.label, { color: isDark ? '#9BA1A6' : '#7A8590' }]}>Duration (Weeks)</Text>
@@ -355,6 +347,11 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 14,
+  },
+  inputReadOnly: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
   },
   inputWrapMultiline: {
     height: 96,
