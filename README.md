@@ -8,7 +8,7 @@
 
 You can download the latest **Android APK** directly from the link below:
 
-### [📥 Download BayadTracker v1.0.0 (APK)](https://expo.dev/artifacts/eas/h6GTdXPeoAJJpQHd7srXip.apk)
+### [📥 Download BayadTracker v1.0.0 (APK)](https://expo.dev/artifacts/eas/i19AgaGDq6NfyoaNbBVUeT.apk)
 
 > **Note for Installation:** Since this is a custom-built app, Android might show a "Play Protect" warning. Simply click **"Install Anyway"** to proceed with the installation.
 
